@@ -11,56 +11,50 @@ permissions:
   security-events: write
 
 jobs:
+
   quality:
-    name: Compilación, Pruebas, Seguridad y Validación del Despliegue
+
+    name: Calidad, Seguridad y Despliegue Backend
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Clonar repositorio
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Configurar JDK 21
+      - name: Configurar Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
 
-      - name: Compilar proyecto
-        run: mvn clean compile
+      - name: Compilar y ejecutar pruebas
+        run: mvn clean verify
 
-      - name: Ejecutar pruebas unitarias
-        run: mvn test
-
-      - name: Empaquetar aplicación
-        run: mvn clean package -DskipTests
-
-      - name: Verificar dependencias
+      - name: Revisar dependencias
         run: mvn dependency:tree
 
-      - name: Construir imagen Docker
-        run: docker build -t backend:ci .
-
-      - name: Analizar código con SonarCloud
+      - name: Analizar código SonarCloud
         if: github.actor != 'dependabot[bot]'
         uses: SonarSource/sonarqube-scan-action@v6
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: Validar archivo Docker Compose
+      - name: Construir imagen Docker
+        run: docker build -t backend:ci .
+
+      - name: Validar Docker Compose
         run: docker compose config
 
-      - name: Iniciar contenedores
+      - name: Levantar ambiente
         run: docker compose up -d --build
 
-      - name: Verificar estado del backend
+      - name: Verificar salud del backend
         run: |
-          docker ps
           for i in {1..24}; do
             if curl --fail --silent http://localhost:8080/actuator/health; then
-              echo "La aplicación está funcionando correctamente"
+              echo "Backend funcionando correctamente"
               exit 0
             fi
             sleep 5
@@ -69,6 +63,6 @@ jobs:
           docker compose logs backend
           exit 1
 
-      - name: Detener contenedores
+      - name: Detener ambiente
         if: always()
         run: docker compose down
